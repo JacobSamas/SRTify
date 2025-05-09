@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# FastAPI/Uploads
+uploads/
+subtitles/
+
+# Environment
+.env
+.env.*
+
+# Node/Next.js
+node_modules/
+.next/
+
+# VSCode
+.vscode/
+
+# MacOS
+.DS_Store
+
+# Logs
+*.log
+
+# Misc
+*.sqlite3
+*.db
