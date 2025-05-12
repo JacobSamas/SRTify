@@ -117,7 +117,7 @@ export default function Home() {
       >
         <input
           type="file"
-          accept=".mp4,.mkv,.mov,.mp3,.wav,.m4a"
+          accept=".mp4,.mkv,.mov,.mp3,.wav,.m4a,.wmv,.avi,.flv,.webm,.aac,.ogg,.opus,.ts,.mts,.3gp,.m4v,.mpeg,.mpg"
           className="hidden"
           ref={inputRef}
           onChange={handleChange}
@@ -128,7 +128,7 @@ export default function Home() {
           </span>
           <span className="text-gray-500 text-sm">or click to select</span>
           <span className="text-xs text-gray-400 mt-2">
-            Supported: MP4, MKV, MOV, MP3, WAV, M4A
+            Supported: MP4, MKV, MOV, WMV, AVI, FLV, WEBM, MP3, WAV, M4A, AAC, OGG, OPUS, TS, MTS, 3GP, M4V, MPEG, MPG
           </span>
         </div>
         {file && (

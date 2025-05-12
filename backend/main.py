@@ -25,7 +25,7 @@ app.add_middleware(
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(SRT_DIR, exist_ok=True)
 
-SUPPORTED_EXTENSIONS = {"mp4", "mkv", "mov", "mp3", "wav", "m4a"}
+SUPPORTED_EXTENSIONS = {"mp4", "mkv", "mov", "mp3", "wav", "m4a", "wmv", "avi", "flv", "webm", "aac", "ogg", "opus", "ts", "mts", "3gp", "m4v", "mpeg", "mpg"}
 
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in SUPPORTED_EXTENSIONS
