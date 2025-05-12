@@ -12,6 +12,7 @@ export default function Home() {
   const [error, setError] = useState("");
   const [polling, setPolling] = useState(false);
   const [processing, setProcessing] = useState(false);
+  const [transcript, setTranscript] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleDrag = (e: React.DragEvent<HTMLDivElement>) => {
@@ -65,13 +66,13 @@ export default function Home() {
     }
   };
 
-  // Poll for SRT status availability
+  // Poll for SRT progress and transcript
   React.useEffect(() => {
     if (fileId && polling) {
       let attempts = 0;
       const interval = setInterval(async () => {
         attempts++;
-        if (attempts > 60) { // 5 minutes
+        if (attempts > 120) { // 10 minutes
           setError("Processing is taking too long. Please try again later.");
           setProcessing(false);
           clearInterval(interval);
@@ -79,29 +80,28 @@ export default function Home() {
           return;
         }
         try {
-          const res = await fetch(`${BACKEND_URL}/status/${fileId}`);
+          const res = await fetch(`${BACKEND_URL}/progress/${fileId}`);
           if (res.ok) {
             const data = await res.json();
-            console.log("[DEBUG] Status response:", data);
-            if (data.status === "done") {
+            setProgress(data.progress || 0);
+            setTranscript(data.transcript || "");
+            if (data.progress >= 100) {
               setPolling(false);
               setProcessing(false);
               clearInterval(interval);
             }
-          } else {
-            // treat non-200 as processing
           }
         } catch (err) {
-          console.error("[DEBUG] Status polling error:", err);
+          console.error("[DEBUG] Progress polling error:", err);
           // network or server error, treat as processing
         }
-      }, 5000); // 5 seconds
+      }, 1500); // 1.5 seconds for smoother updates
       return () => {
         clearInterval(interval);
         setProcessing(false);
       };
     }
-  }, [fileId]);
+  }, [fileId, polling]);
 
   return (
     <div className="flex flex-col items-center min-h-screen justify-center bg-gray-50 dark:bg-black p-4">
@@ -150,15 +150,42 @@ export default function Home() {
       </button>
       {(uploading || polling) && (
         <div className="mt-4 w-full max-w-lg">
+          <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700 overflow-hidden">
+            {/* Indeterminate bar animation */}
+            <div className={`bg-blue-600 h-2.5 rounded-full animate-indeterminate`}
+                style={{ width: uploading ? '100%' : '40%' }}></div>
+          </div>
+          <style jsx>{`
+            @keyframes indeterminate {
+              0% { margin-left: -40%; width: 40%; }
+              100% { margin-left: 100%; width: 40%; }
+            }
+            .animate-indeterminate {
+              animation: indeterminate 1.2s infinite linear;
+            }
+          `}</style>
+          <div className="text-center text-xs mt-2 text-gray-500">
+            {uploading ? "Uploading..." : `Generating subtitles...`}
+          </div>
+        </div>
+      )}
+      {fileId && !polling && (
+        <div className="mt-4 w-full max-w-lg">
           <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">
             <div
               className="bg-blue-600 h-2.5 rounded-full transition-all"
-              style={{ width: `${progress}%` }}
+              style={{ width: `100%` }}
             ></div>
           </div>
           <div className="text-center text-xs mt-2 text-gray-500">
-            {uploading ? "Uploading..." : "Generating subtitles (this may take a few minutes)..."}
+            Done!
           </div>
+        </div>
+      )}
+      {fileId && !polling && transcript && (
+        <div className="bg-gray-50 dark:bg-zinc-800 rounded p-3 mt-8 text-xs max-h-60 overflow-y-auto border border-gray-200 dark:border-zinc-700 w-full max-w-lg">
+          <div className="font-semibold mb-2 text-blue-600 dark:text-blue-300">Transcript Preview:</div>
+          {transcript.split("\n").map((line, i) => line.trim() && <div key={i}>{line}</div>)}
         </div>
       )}
       {fileId && !polling && (

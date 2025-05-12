@@ -30,36 +30,40 @@ SUPPORTED_EXTENSIONS = {"mp4", "mkv", "mov", "mp3", "wav", "m4a"}
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in SUPPORTED_EXTENSIONS
 
-def run_whisper(input_path, output_path):
+import whisper
+import threading
+import time
+
+# Global dicts for progress and partial transcript
+progress_dict = {}
+transcript_dict = {}
+
+# Use Whisper Python API for real-time progress and transcript
+
+def run_whisper(input_path, output_path, file_id):
     try:
         logging.info(f"[EVENT] Starting Whisper transcription for {input_path}")
-        cmd = [
-            "whisper",
-            input_path,
-            "--task", "translate",
-            "--output_format", "srt",
-            "--output_dir", os.path.dirname(output_path),
-        ]
-        subprocess.run(cmd, check=True)
-        srt_dir = os.path.dirname(output_path)
-        logging.info(f"[DEBUG] Files in SRT_DIR after Whisper: {os.listdir(srt_dir)}")
-        base = os.path.splitext(os.path.basename(input_path))[0]
-        generated = os.path.join(srt_dir, f"{base}.srt")
-        if os.path.exists(generated):
-            if generated != output_path:
-                logging.info(f"[DEBUG] Renaming {generated} to {output_path}")
-                os.rename(generated, output_path)
-        elif os.path.exists(output_path):
-            logging.info(f"[DEBUG] SRT already at expected location: {output_path}")
+        model = whisper.load_model("base")
+        audio = whisper.load_audio(input_path)
+        # Do NOT pad_or_trim here; process the full audio
+        result = model.transcribe(audio, task="translate", verbose=False, language="en", word_timestamps=False, condition_on_previous_text=True, beam_size=5, best_of=5, fp16=False)
+        # Simulate live progress and transcript updates after transcription completes
+        transcript = ""
+        segments = result.get("segments", [])
+        total = len(segments)
+        if total > 0:
+            for idx, seg in enumerate(segments):
+                transcript += seg["text"] + "\n"
+                transcript_dict[file_id] = transcript
+                progress_dict[file_id] = int(100 * (idx + 1) / total)
+                time.sleep(0.15)  # simulate delay for frontend polling
         else:
-            srt_files = [f for f in os.listdir(srt_dir) if f.endswith('.srt')]
-            if srt_files:
-                found = os.path.join(srt_dir, srt_files[0])
-                logging.info(f"[DEBUG] Renaming found SRT {found} to {output_path}")
-                os.rename(found, output_path)
-            else:
-                logging.error(f"[ERROR] No SRT found in {srt_dir}")
-                raise Exception("SRT file not generated.")
+            transcript_dict[file_id] = result.get("text", "")
+            progress_dict[file_id] = 100
+        # Write SRT file
+        with open(output_path, "w", encoding="utf-8") as f:
+            for idx, seg in enumerate(result["segments"], 1):
+                f.write(f"{idx}\n{whisper.utils.format_timestamp(seg['start'])} --> {whisper.utils.format_timestamp(seg['end'])}\n{seg['text'].strip()}\n\n")
         logging.info(f"[EVENT] Whisper transcription completed for {input_path}")
         # Delete the uploaded file after transcription
         try:
@@ -67,8 +71,13 @@ def run_whisper(input_path, output_path):
             logging.info(f"[CLEANUP] Deleted uploaded file: {input_path}")
         except Exception as cleanup_err:
             logging.warning(f"[CLEANUP] Failed to delete uploaded file: {input_path}. Error: {cleanup_err}")
+        # Mark progress as 100 and transcript as final
+        progress_dict[file_id] = 100
+        transcript_dict[file_id] = transcript
     except Exception as e:
         logging.error(f"[ERROR] Whisper failed for {input_path}: {e}")
+        progress_dict[file_id] = -1
+        transcript_dict[file_id] = f"[ERROR] {e}"
         raise
 
 @app.middleware("http")
@@ -94,12 +103,17 @@ async def upload_file(background_tasks: BackgroundTasks, file: UploadFile = File
         with open(input_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         logging.info(f"[EVENT] Upload received: {input_path}")
-        background_tasks.add_task(run_whisper, input_path, output_path)
+        background_tasks.add_task(run_whisper, input_path, output_path, file_id)
         return {"file_id": file_id}
     except Exception as e:
         logging.error(f"[ERROR] Upload failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Upload failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/progress/{file_id}")
+def progress_srt(file_id: str):
+    progress = progress_dict.get(file_id, 0)
+    transcript = transcript_dict.get(file_id, "")
+    return {"progress": progress, "transcript": transcript}
 
 @app.get("/download/{file_id}")
 def download_srt(file_id: str):
